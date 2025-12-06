@@ -1,0 +1,85 @@
+# Replace `<OWNER>/<REPO>` with this action’s repository, and `<TOOL>` / `<HOOK_ID>` with the actual tool and hook name for the concrete action.
+name: "Run <TOOL> via pre-commit + reviewdog"
+description: "Runs <HOOK_ID> pre-commit hook on a diff range and reports via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code of the <HOOK_ID> pre-commit hook"
+    value: ${{ steps.run_hook.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    # TODO: customize this step for your specific hook and parsing logic
+    - name: Run <HOOK_ID> pre-commit hook
+      id: run_hook
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        # Run the specific pre-commit hook on the diff range
+        pre-commit run <HOOK_ID> \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee hook-output.txt
+
+        exitcode=${PIPESTATUS[0]}
+        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report findings via reviewdog
+      if: steps.run_hook.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        # TODO: adapt this part to match your tool's output format and efm
+        # For example, you might need to transform hook-output.txt lines
+        # into reviewdog's %t:%f:%l:%c:%m format.
+
+        cat hook-output.txt \
+          | reviewdog \
+              -efm="%f:%l:%c: %m" \
+              -name="<TOOL>" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+        # Fail the job if there were violations
+        exit 1
