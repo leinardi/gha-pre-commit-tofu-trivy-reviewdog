@@ -43,7 +43,7 @@ runs:
       uses: opentofu/setup-opentofu@v1
 
     - name: Install Trivy
-      uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+      uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514
 
     - name: Setup reviewdog binary
       uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
